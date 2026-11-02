@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Gas Price Finder</title>
+    <style>
+        body{
+            font-family: 'Times New Roman', Times, serif;
+            background-color: blueviolet;
+            display: flex;
+            justify-content: center;
+            padding: 40px 16px;
+            margin: 0;
+        }
+
+        .app-container{
+            background-color: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 480px;
+        }
+
+        h1{
+            margin-top: 0;
+            color: cadetblue;
+            font-size: 24px;
+            text-align: center;
+        }
+
+        .search-box {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        input[type="text"]{
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        button{
+            padding: 16px;
+            background-color: darkgreen;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: deeppink;
+        }
+
+        .results-container{
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .station-card{
+            border: 1px solid #e1e4e8;
+            border-radius: 8px;
+            padding: 16px 16px;
+            background: #fafbfc;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .station-card.cheapest {
+            border: 2px solid #28a745;
+            background: #f0fff4;
+        }
+
+        .badge{
+            background: #28a745;
+            color: white;
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-left: 8px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .station-info h3{
+            margin: 0 0 4px 0;
+            color: #333;
+            font-size: 16px;
+        }
+
+        .price-tag{
+            font-size: 20px;
+            font-weight: bold;
+            color: #155724;
+        }
+
+        .no-results{
+            text-align: center;
+            color: #777;
+            margin-top: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <h1>Local Gas Price Finder</h1>
+
+        <div class="search-box">
+            <input id="zip-input" type="text" placeholder="Enter Zip Code" maxlength="5">
+            <button id="search-btn">Search</button>
+        </div>
+
+        <div id="results-list" class="results-container"></div>
+    </div>
+</body>
+<script>
+    const gasData = [
+        {name: "speedway", address: "main street", zip: "46544", price: 3.19},
+        {name: "bp", address: "grape rd", zip: "46544", price: 3.29},
+        {name: "circle k", address: "lincolnway E", zip: "46544", price: 3.12}
+    ];
+
+    const zipInput = document.querySelector('#zip-input');
+    const searchBtn = document.querySelector('#search-btn');
+    const resultsList = document.querySelector('#results-list');
+
+    function findCheapestGas() {
+        const userZip = zipInput.value.trim();
+        resultsList.innerHTML = ""; // Clear old results
+
+        if (userZip === ""){
+            resultsList.innerHTML = "<p class='no-results'>Please enter a valid zipcode.</p>";
+            return;
+        }
+
+        const filteredStations = gasData.filter(function(station){
+            return station.zip === userZip;
+        });
+
+        if (filteredStations.length === 0) {
+            resultsList.innerHTML = `<p class='no-results'>No gas stations found for zip code: ${userZip}</p>`;
+            return;
+        }
+        
+        filteredStations.sort(function(a, b){
+            return a.price - b.price;
+        });
+
+        filteredStations.forEach(function(station, index){
+            const card = document.createElement('div');
+            card.classList.add('station-card');
+
+            const isCheapest = index === 0;
+            if (isCheapest) {
+                card.classList.add('cheapest');
+            }
+
+            card.innerHTML = `
+              <div class="station-info">
+                <h3>${station.name} ${isCheapest ? '<span class="badge">Cheapest</span>' : ''}</h3>
+                <p>${station.address}</p>
+              </div>
+              <div class="price-tag">$${station.price.toFixed(2)}</div>
+            `;
+
+            resultsList.appendChild(card);
+        });
+    }
+
+    searchBtn.addEventListener('click', function(){
+        findCheapestGas();
+    });
+
+    zipInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            findCheapestGas();
+        }
+    });
+</script>
+</html>
