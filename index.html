@@ -144,6 +144,19 @@
             color: #155724;
         }
 
+        .faith-badge {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+            text-transform: uppercase;
+            color: white;
+            margin-left: 6px;
+        }
+        .faith-high { background-color: #28a745; }   /* 🟢 Green: Fresh & Verified */
+        .faith-moderate { background-color: #e0a800; } /* 🟡 Yellow: Aging Data */
+        .faith-stale { background-color: #dc3545; }    /* 🔴 Red: Old / Low Faith */
+
         .no-results {
             text-align: center;
             color: #777;
@@ -177,9 +190,27 @@
         <hr>
 
         <!-- STREAMLINED CROWDSOURCE FORM (PIN ONLY) -->
+        <!-- STREAMLINED CROWDSOURCE FORM (PIN ONLY) -->
         <h2>Submit Price & Pin</h2>
         <div class="add-box">
-            <input id="new-name" type="text" placeholder="Station Name (e.g. Speedway)">
+            <!-- 1. Added list="known-stations" and autocomplete="off" -->
+            <input id="new-name" type="text" placeholder="Station Name (e.g. Speedway)" list="known-stations" autocomplete="off">
+            
+            <!-- 2. The Godot-style Enum Dropdown List -->
+            <datalist id="known-stations">
+                <option value="Speedway">
+                <option value="Marathon">
+                <option value="BP">
+                <option value="Circle K">
+                <option value="Shell">
+                <option value="Costco Gasoline">
+                <option value="Meijer Express">
+                <option value="Exxon">
+                <option value="Chevron">
+                <option value="Wawa">
+                <option value="Sheetz">
+            </datalist>
+
             <input id="new-price" type="number" step="0.01" placeholder="Price (e.g. 3.19)">
             <button id="gps-tag-btn" class="gps-btn">📍 Drop GPS Pin at Current Location</button>
             <button id="add-btn">Save to Cloud Database</button>
@@ -341,41 +372,141 @@
         }, { timeout: 10000 });
     }
 
-    // 5. TAG CURRENT GPS LOCATION FOR SUBMISSION
+    // 5. TAG CURRENT GPS LOCATION FOR SUBMISSION WITH ACCURACY CHECK
     gpsTagBtn.addEventListener('click', function() {
         if (!navigator.geolocation) {
             alert("Geolocation not supported.");
             return;
         }
-        gpsTagBtn.textContent = "📍 Dropping Pin...";
+        gpsTagBtn.textContent = "📍 Acquiring GPS Lock...";
         
         navigator.geolocation.getCurrentPosition(function(position) {
+            const accuracy = position.coords.accuracy; // Accuracy in meters
+            console.log("GPS Accuracy reading:", accuracy, "meters");
+
+            // Drift Protection: If accuracy worse than 50 meters (~160 feet)
+            if (accuracy > 50) {
+                const proceed = confirm(`⚠️ Weak GPS signal detected (~${Math.round(accuracy)}m accuracy). You might be indoors or near tall buildings. Drop pin anyway?`);
+                if (!proceed) {
+                    gpsTagBtn.textContent = "📍 Drop GPS Pin at Current Location";
+                    gpsTagBtn.style.backgroundColor = "#007bff";
+                    return;
+                }
+            }
+
             capturedLatitude = position.coords.latitude;
             capturedLongitude = position.coords.longitude;
-            gpsTagBtn.textContent = "📍 GPS Pin Dropped Successfully! ✓";
+            gpsTagBtn.textContent = `📍 GPS Locked (${Math.round(accuracy)}m) ✓`;
             gpsTagBtn.style.backgroundColor = "#28a745";
         }, function(error) {
-            alert("Failed to get GPS location.");
+            alert("Failed to get GPS location. Please check your browser permissions.");
             gpsTagBtn.textContent = "📍 Drop GPS Pin at Current Location";
-        }, { timeout: 10000 });
+            gpsTagBtn.style.backgroundColor = "#007bff";
+        }, { 
+            enableHighAccuracy: true, // Forces the phone to use real GPS hardware instead of Wi-Fi triangulation
+            timeout: 10000, 
+            maximumAge: 0 
+        });
     });
 
     // 6. SUBMIT TO CLOUD DATABASE
-    async function submitGasPrice() {
-        const name = newName.value.trim();
-        const price = parseFloat(newPrice.value);
+async function submitGasPrice() {
+    const name = newName.value.trim();
+    const price = parseFloat(newPrice.value);
 
-        if (!name || isNaN(price)) {
-            alert("Please enter a station name and valid price!");
+    // 1. Basic & Anti-Troll Validation
+    if (!name || isNaN(price)) {
+        alert("Please enter a station name and valid price!");
+        return;
+    }
+
+    if (price < 1.00 || price > 10.00) {
+        alert("Please enter a realistic gas price between $1.00 and $10.00.");
+        return;
+    }
+
+    if (capturedLatitude === null || capturedLongitude === null) {
+        alert("Please click 'Drop GPS Pin at Current Location' first!");
+        return;
+    }
+
+    // 🛡️ DEFENSE LAYER 1: COOLDOWN TIMER (15-Minute Rate Limit)
+    const cooldownMinutes = 15;
+    const lastSubmission = localStorage.getItem('last_gas_submission');
+    if (lastSubmission) {
+        const minutesPassed = (Date.now() - parseInt(lastSubmission)) / (1000 * 60);
+        if (minutesPassed < cooldownMinutes) {
+            const waitTime = Math.ceil(cooldownMinutes - minutesPassed);
+            alert(`⏳ Rate limit active: Please wait ${waitTime} more minute(s) before submitting another price update.`);
             return;
         }
+    }
 
-        if (capturedLatitude === null || capturedLongitude === null) {
-            alert("Please click 'Drop GPS Pin at Current Location' first!");
-            return;
+    // 2. DUPLICATE CHECK: Fetch existing stations from Supabase first
+    const { data: existingStations, fetchError } = await db
+        .from('stations')
+        .select('*');
+
+    if (fetchError) {
+        console.error('Error checking existing stations:', fetchError);
+    }
+
+    // Helper math function to calculate distance in miles (Haversine formula)
+    function getDistanceFromLatLonInMiles(lat1, lon1, lat2, lon2) {
+        const R = 3958.8; // Radius of the earth in miles
+        const dLat = deg2rad(lat2 - lat1);
+        const dLon = deg2rad(lon2 - lon1);
+        const a = 
+            Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c;
+    }
+    function deg2rad(deg) {
+        return deg * (Math.PI / 180);
+    }
+
+    // Look for any station within 0.03 miles (~50 meters) of current GPS pin
+    let matchingStation = null;
+    if (existingStations) {
+        matchingStation = existingStations.find(station => {
+            const distance = getDistanceFromLatLonInMiles(
+                capturedLatitude, capturedLongitude, 
+                station.latitude, station.longitude
+            );
+            return distance <= 0.03; // Within ~50 meters
+        });
+    }
+
+    // 🛡️ DEFENSE LAYER 2: PERCENTAGE JUMP GUARDRAIL (Anomaly Detection)
+    if (matchingStation) {
+        const priceDiffPercent = Math.abs(price - matchingStation.price) / matchingStation.price;
+        if (priceDiffPercent > 0.30) { // More than 30% swing
+            const confirmAnomaly = confirm(`⚠️ Price Alert: $${price.toFixed(2)} is more than 30% different from the current recorded price ($${Number(matchingStation.price).toFixed(2)}). Is this correct?`);
+            if (!confirmAnomaly) return;
         }
+    }
 
-        const { error } = await db
+    let error;
+
+    if (matchingStation) {
+        // 3A. UPDATE EXISTING STATION (Prevent Duplicate)
+        console.log("Found nearby station, updating existing record ID:", matchingStation.id);
+        const response = await db
+            .from('stations')
+            .update({ 
+                name: name, 
+                price: price, 
+                created_at: new Date().toISOString() // Refreshes timestamp
+            })
+            .eq('id', matchingStation.id);
+        
+        error = response.error;
+    } else {
+        // 3B. INSERT NEW STATION
+        console.log("No nearby station found. Creating new pin.");
+        const response = await db
             .from('stations')
             .insert([
                 { 
@@ -387,25 +518,62 @@
                     zip: "00000"
                 }
             ]);
+            
+        error = response.error;
+    }
 
-        if (error) {
-            console.error('Supabase insert error:', error);
-            alert("Failed to save to cloud database.");
-            return;
+    if (error) {
+        console.error('Supabase save error:', error);
+        alert("Failed to save to cloud database.");
+        return;
+    }
+
+    // Stamp the successful submission time into browser localStorage
+    localStorage.setItem('last_gas_submission', Date.now().toString());
+
+    alert(matchingStation ? "Success! Updated price for nearby station." : "Success! New station and GPS pin saved.");
+
+    // Reset form
+    newName.value = "";
+    newPrice.value = "";
+    capturedLatitude = null;
+    capturedLongitude = null;
+    gpsTagBtn.textContent = "📍 Drop GPS Pin at Current Location";
+    gpsTagBtn.style.backgroundColor = "#007bff";
+
+    scanRadarAndSearch();
+}
+
+    // Helper function to calculate time elapsed
+    // Helper function to calculate time elapsed
+    function getTimeAgo(dateString) {
+        if (!dateString) return "Recently";
+        const now = new Date();
+        const updated = new Date(dateString);
+        const hoursAgo = Math.floor((now - updated) / (1000 * 60 * 60));
+        
+        if (hoursAgo < 1) return "Just now";
+        if (hoursAgo === 1) return "1 hour ago";
+        if (hoursAgo < 24) return `${hoursAgo} hours ago`;
+        const daysAgo = Math.floor(hoursAgo / 24);
+        return `${daysAgo} day(s) ago`;
+    }
+
+    // 🌟 NEW: Calculate Confidence / Faith Rating based on recency
+    function getConfidenceLevel(dateString) {
+        if (!dateString) return { label: "Moderate Faith", class: "faith-moderate" };
+        
+        const now = new Date();
+        const updated = new Date(dateString);
+        const hoursAgo = (now - updated) / (1000 * 60 * 60);
+
+        if (hoursAgo <= 3) {
+            return { label: "High Faith", class: "faith-high" };       // 🟢 Green (< 3 hours)
+        } else if (hoursAgo <= 12) {
+            return { label: "Moderate", class: "faith-moderate" };   // 🟡 Yellow (3 - 12 hours)
+        } else {
+            return { label: "Low Faith", class: "faith-stale" };       // 🔴 Red (> 12 hours)
         }
-
-        alert("Success! Station and GPS pin saved to the cloud database.");
-
-        // Reset form
-        newName.value = "";
-        newPrice.value = "";
-        capturedLatitude = null;
-        capturedLongitude = null;
-        gpsTagBtn.textContent = "📍 Drop GPS Pin at Current Location";
-        gpsTagBtn.style.backgroundColor = "#007bff";
-
-        // Re-scan radar
-        scanRadarAndSearch();
     }
 
     // 7. RENDER RESULTS CARDS
@@ -426,10 +594,18 @@
                 card.classList.add('cheapest');
             }
 
+            // Format timestamp and confidence rating
+            const timeAgoText = getTimeAgo(station.created_at);
+            const confidence = getConfidenceLevel(station.created_at);
+
             card.innerHTML = `
               <div class="station-info">
-                <h3>${station.name} ${isCheapest ? '<span class="badge">Cheapest</span>' : ''}</h3>
-                <p>📍 ${station.distance.toFixed(1)} miles away</p>
+                <h3>
+                    ${station.name} 
+                    ${isCheapest ? '<span class="badge">Cheapest</span>' : ''}
+                    <span class="faith-badge ${confidence.class}">${confidence.label}</span>
+                </h3>
+                <p>📍 ${station.distance.toFixed(1)} miles away • 🕒 ${timeAgoText}</p>
               </div>
               <div class="price-tag">$${Number(station.price).toFixed(2)}</div>
             `;
