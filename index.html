@@ -3,18 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Local Gas Price Finder</title>
+    <title>Geo Radar Gas Finder</title>
+    
+    <!-- Supabase Client Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
     <style>
-        body{
-            font-family: 'Times New Roman', Times, serif;
-            background-color: blueviolet;
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #6a0dad;
             display: flex;
             justify-content: center;
-            padding: 40px 16px;
+            padding: 30px 16px;
             margin: 0;
         }
 
-        .app-container{
+        .app-container {
             background-color: white;
             padding: 24px;
             border-radius: 12px;
@@ -23,35 +27,34 @@
             max-width: 480px;
         }
 
-        h1{
+        h1, h2 {
             margin-top: 0;
             color: cadetblue;
-            font-size: 24px;
             text-align: center;
         }
 
-        .search-box {
+        .search-box, .add-box {
             display: flex;
-            gap: 8px;
+            flex-direction: column;
+            gap: 10px;
             margin-bottom: 20px;
         }
 
-        input[type="text"]{
-            flex: 1;
+        input[type="text"], input[type="number"] {
             padding: 12px;
             border: 1px solid #ccc;
             border-radius: 8px;
             font-size: 16px;
         }
 
-        button{
-            padding: 16px;
+        button {
+            padding: 14px;
             background-color: darkgreen;
             color: white;
             border: none;
             border-radius: 8px;
             font-weight: bold;
-            font-size: 16px;
+            font-size: 15px;
             cursor: pointer;
         }
 
@@ -59,16 +62,48 @@
             background-color: deeppink;
         }
 
-        .results-container{
+        .gps-btn {
+            background-color: #007bff;
+        }
+        .gps-btn:hover {
+            background-color: #0056b3;
+        }
+
+        /* Radar Map Styling */
+        .map-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 20px;
+            background: #1e1e2f;
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        canvas {
+            background: #111118;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(0,255,255,0.2);
+        }
+
+        .map-label {
+            color: #00ffcc;
+            font-size: 12px;
+            margin-top: 8px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .results-container {
             display: flex;
             flex-direction: column;
             gap: 12px;
         }
 
-        .station-card{
+        .station-card {
             border: 1px solid #e1e4e8;
             border-radius: 8px;
-            padding: 16px 16px;
+            padding: 14px 16px;
             background: #fafbfc;
             display: flex;
             justify-content: space-between;
@@ -80,82 +115,309 @@
             background: #f0fff4;
         }
 
-        .badge{
+        .badge {
             background: #28a745;
             color: white;
-            font-size: 12px;
-            padding: 2px 8px;
+            font-size: 11px;
+            padding: 2px 6px;
             border-radius: 4px;
-            margin-left: 8px;
+            margin-left: 6px;
             font-weight: bold;
             text-transform: uppercase;
         }
 
-        .station-info h3{
+        .station-info h3 {
             margin: 0 0 4px 0;
             color: #333;
             font-size: 16px;
         }
 
-        .price-tag{
+        .station-info p {
+            margin: 0;
+            color: #666;
+            font-size: 13px;
+        }
+
+        .price-tag {
             font-size: 20px;
             font-weight: bold;
             color: #155724;
         }
 
-        .no-results{
+        .no-results {
             text-align: center;
             color: #777;
             margin-top: 12px;
+        }
+
+        hr {
+            margin: 20px 0;
+            border: 0;
+            border-top: 1px solid #ddd;
         }
     </style>
 </head>
 <body>
     <div class="app-container">
-        <h1>Local Gas Price Finder</h1>
+        <h1>⛽ Geo Radar Gas Finder</h1>
 
+        <!-- SEARCH & MAP SECTION -->
         <div class="search-box">
-            <input id="zip-input" type="text" placeholder="Enter Zip Code" maxlength="5">
-            <button id="search-btn">Search</button>
+            <button id="gps-search-btn" class="gps-btn">📍 Scan 5-Mile Radius & Radar Map</button>
+        </div>
+
+        <!-- MOCK 5-MILE RADAR MAP CANVAS -->
+        <div class="map-container">
+            <canvas id="radarCanvas" width="260" height="260"></canvas>
+            <div class="map-label">5-Mile Radius Radar View</div>
         </div>
 
         <div id="results-list" class="results-container"></div>
+
+        <hr>
+
+        <!-- STREAMLINED CROWDSOURCE FORM (PIN ONLY) -->
+        <h2>Submit Price & Pin</h2>
+        <div class="add-box">
+            <input id="new-name" type="text" placeholder="Station Name (e.g. Speedway)">
+            <input id="new-price" type="number" step="0.01" placeholder="Price (e.g. 3.19)">
+            <button id="gps-tag-btn" class="gps-btn">📍 Drop GPS Pin at Current Location</button>
+            <button id="add-btn">Save to Cloud Database</button>
+        </div>
     </div>
-</body>
+
 <script>
-    const gasData = [
-        {name: "speedway", address: "main street", zip: "46544", price: 3.19},
-        {name: "bp", address: "grape rd", zip: "46544", price: 3.29},
-        {name: "circle k", address: "lincolnway E", zip: "46544", price: 3.12}
-    ];
+    // 1. SUPABASE CLOUD CONNECTION
+    const SUPABASE_URL = 'https://gtwoqrymxyzqzmutuplv.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_l6qW68jDY4J6BSwS9nAnrw_37PHghDi';
+    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    const zipInput = document.querySelector('#zip-input');
-    const searchBtn = document.querySelector('#search-btn');
+    // DOM References
+    const gpsSearchBtn = document.querySelector('#gps-search-btn');
     const resultsList = document.querySelector('#results-list');
+    const canvas = document.querySelector('#radarCanvas');
+    const ctx = canvas.getContext('2d');
 
-    function findCheapestGas() {
-        const userZip = zipInput.value.trim();
-        resultsList.innerHTML = ""; // Clear old results
+    const newName = document.querySelector('#new-name');
+    const newPrice = document.querySelector('#new-price');
+    const gpsTagBtn = document.querySelector('#gps-tag-btn');
+    const addBtn = document.querySelector('#add-btn');
 
-        if (userZip === ""){
-            resultsList.innerHTML = "<p class='no-results'>Please enter a valid zipcode.</p>";
-            return;
-        }
+    let capturedLatitude = null;
+    let capturedLongitude = null;
 
-        const filteredStations = gasData.filter(function(station){
-            return station.zip === userZip;
+    // Draw initial blank radar grid on load
+    drawRadarMap([]);
+
+    // 2. HAVERSINE DISTANCE FORMULA (miles)
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+        const R = 3958.8;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = 
+            Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c;
+    }
+
+    // 3. DRAW CUSTOM 5-MILE RADAR MAP ON CANVAS
+    function drawRadarMap(stations, userLat, userLon) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const maxRadiusPixels = 110; // 5 miles outer ring
+
+        // Draw radar circles (1mi, 3mi, 5mi rings)
+        [0.2, 0.6, 1.0].forEach(function(scale) {
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, maxRadiusPixels * scale, 0, 2 * Math.PI);
+            ctx.strokeStyle = '#22223b';
+            ctx.lineWidth = 1;
+            ctx.stroke();
         });
 
-        if (filteredStations.length === 0) {
-            resultsList.innerHTML = `<p class='no-results'>No gas stations found for zip code: ${userZip}</p>`;
+        // Draw crosshairs
+        ctx.strokeStyle = '#22223b';
+        ctx.beginPath();
+        ctx.moveTo(centerX, 15); ctx.lineTo(centerX, canvas.height - 15);
+        ctx.moveTo(15, centerY); ctx.lineTo(canvas.width - 15, centerY);
+        ctx.stroke();
+
+        // Draw User Center Pin (Blue)
+        ctx.fillStyle = '#007bff';
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, 6, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // If we have stations and user GPS, plot them relative to center
+        if (userLat && userLon && stations) {
+            stations.forEach(function(station, index) {
+                if (!station.latitude || !station.longitude) return;
+
+                // Approximate delta in miles (1 degree lat ~= 69 miles)
+                const dLatMiles = (station.latitude - userLat) * 69;
+                const dLonMiles = (station.longitude - userLon) * 69 * Math.cos(userLat * Math.PI / 180);
+
+                // Map miles to canvas pixels (5 miles = maxRadiusPixels)
+                const xOffset = (dLonMiles / 5) * maxRadiusPixels;
+                const yOffset = -(dLatMiles / 5) * maxRadiusPixels; // Invert Y for screen coords
+
+                const plotX = centerX + xOffset;
+                const plotY = centerY + yOffset;
+
+                // Keep dots inside radar bounds
+                const distFromCenter = Math.sqrt(xOffset*xOffset + yOffset*yOffset);
+                if (distFromCenter <= maxRadiusPixels) {
+                    ctx.fillStyle = index === 0 ? '#28a745' : '#ffc107'; // Green for cheapest, yellow for others
+                    ctx.beginPath();
+                    ctx.arc(plotX, plotY, 5, 0, 2 * Math.PI);
+                    ctx.fill();
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+            });
+        }
+    }
+
+    // 4. SCAN RADAR & FETCH NEARBY STATIONS VIA GPS
+    async function scanRadarAndSearch() {
+        resultsList.innerHTML = "<p class='no-results'>Acquiring GPS location...</p>";
+
+        if (!navigator.geolocation) {
+            alert("Geolocation is not supported by your browser.");
+            resultsList.innerHTML = "";
             return;
         }
+
+        navigator.geolocation.getCurrentPosition(async function(position) {
+            const userLat = position.coords.latitude;
+            const userLon = position.coords.longitude;
+
+            resultsList.innerHTML = "<p class='no-results'>Scanning 5-mile radius...</p>";
+
+            const { data: stations, error } = await db
+                .from('stations')
+                .select('*');
+
+            if (error) {
+                console.error('Supabase fetch error:', error);
+                resultsList.innerHTML = "<p class='no-results'>Error connecting to cloud.</p>";
+                return;
+            }
+
+            if (!stations || stations.length === 0) {
+                resultsList.innerHTML = "<p class='no-results'>No stations in database yet. Drop a pin below!</p>";
+                drawRadarMap([], userLat, userLon);
+                return;
+            }
+
+            // Calculate distance & filter within 5 miles
+            const nearbyStations = stations.filter(function(station) {
+                if (!station.latitude || !station.longitude) return false;
+                const distance = calculateDistance(userLat, userLon, station.latitude, station.longitude);
+                station.distance = distance;
+                return distance <= 5;
+            });
+
+            // Sort cheapest first
+            nearbyStations.sort(function(a, b) {
+                return a.price - b.price;
+            });
+
+            // Redraw radar with plotted stations
+            drawRadarMap(nearbyStations, userLat, userLon);
+            renderStations(nearbyStations);
+
+        }, function(error) {
+            alert("Location access denied or timed out. Make sure you are using Live Server!");
+            resultsList.innerHTML = "";
+        }, { timeout: 10000 });
+    }
+
+    // 5. TAG CURRENT GPS LOCATION FOR SUBMISSION
+    gpsTagBtn.addEventListener('click', function() {
+        if (!navigator.geolocation) {
+            alert("Geolocation not supported.");
+            return;
+        }
+        gpsTagBtn.textContent = "📍 Dropping Pin...";
         
-        filteredStations.sort(function(a, b){
-            return a.price - b.price;
-        });
+        navigator.geolocation.getCurrentPosition(function(position) {
+            capturedLatitude = position.coords.latitude;
+            capturedLongitude = position.coords.longitude;
+            gpsTagBtn.textContent = "📍 GPS Pin Dropped Successfully! ✓";
+            gpsTagBtn.style.backgroundColor = "#28a745";
+        }, function(error) {
+            alert("Failed to get GPS location.");
+            gpsTagBtn.textContent = "📍 Drop GPS Pin at Current Location";
+        }, { timeout: 10000 });
+    });
 
-        filteredStations.forEach(function(station, index){
+    // 6. SUBMIT TO CLOUD DATABASE
+    async function submitGasPrice() {
+        const name = newName.value.trim();
+        const price = parseFloat(newPrice.value);
+
+        if (!name || isNaN(price)) {
+            alert("Please enter a station name and valid price!");
+            return;
+        }
+
+        if (capturedLatitude === null || capturedLongitude === null) {
+            alert("Please click 'Drop GPS Pin at Current Location' first!");
+            return;
+        }
+
+        const { error } = await db
+            .from('stations')
+            .insert([
+                { 
+                    name: name, 
+                    address: "Pinned GPS Location", 
+                    price: price,
+                    latitude: capturedLatitude,
+                    longitude: capturedLongitude,
+                    zip: "00000"
+                }
+            ]);
+
+        if (error) {
+            console.error('Supabase insert error:', error);
+            alert("Failed to save to cloud database.");
+            return;
+        }
+
+        alert("Success! Station and GPS pin saved to the cloud database.");
+
+        // Reset form
+        newName.value = "";
+        newPrice.value = "";
+        capturedLatitude = null;
+        capturedLongitude = null;
+        gpsTagBtn.textContent = "📍 Drop GPS Pin at Current Location";
+        gpsTagBtn.style.backgroundColor = "#007bff";
+
+        // Re-scan radar
+        scanRadarAndSearch();
+    }
+
+    // 7. RENDER RESULTS CARDS
+    function renderStations(stations) {
+        resultsList.innerHTML = "";
+
+        if (stations.length === 0) {
+            resultsList.innerHTML = "<p class='no-results'>No gas stations found within 5 miles.</p>";
+            return;
+        }
+
+        stations.forEach(function(station, index) {
             const card = document.createElement('div');
             card.classList.add('station-card');
 
@@ -167,23 +429,18 @@
             card.innerHTML = `
               <div class="station-info">
                 <h3>${station.name} ${isCheapest ? '<span class="badge">Cheapest</span>' : ''}</h3>
-                <p>${station.address}</p>
+                <p>📍 ${station.distance.toFixed(1)} miles away</p>
               </div>
-              <div class="price-tag">$${station.price.toFixed(2)}</div>
+              <div class="price-tag">$${Number(station.price).toFixed(2)}</div>
             `;
 
             resultsList.appendChild(card);
         });
     }
 
-    searchBtn.addEventListener('click', function(){
-        findCheapestGas();
-    });
-
-    zipInput.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            findCheapestGas();
-        }
-    });
+    // Event Listeners
+    gpsSearchBtn.addEventListener('click', scanRadarAndSearch);
+    addBtn.addEventListener('click', submitGasPrice);
 </script>
+</body>
 </html>
