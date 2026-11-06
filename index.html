@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Geo Radar Gas Finder</title>
     
-    <!-- Supabase Client Library -->
+    <!-- Supabase Client Library (we can use this for like small server stuff, definitely gotta bookmark this, also use gemini to double check what we get wrong
+     this is all about learning. blank sheet syndrome is real until my hands learn this, so Always practice practice practice) -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <style>
@@ -153,9 +154,9 @@
             color: white;
             margin-left: 6px;
         }
-        .faith-high { background-color: #28a745; }   /* 🟢 Green: Fresh & Verified */
-        .faith-moderate { background-color: #e0a800; } /* 🟡 Yellow: Aging Data */
-        .faith-stale { background-color: #dc3545; }    /* 🔴 Red: Old / Low Faith */
+        .faith-high { background-color: #28a745; }   /* 🟢 Green: Fresh & Verified (this looks like the standard people use*/
+        .faith-moderate { background-color: #e0a800; } /* 🟡 Yellow: Aging Data (maybe i should make a better system) */
+        .faith-stale { background-color: #dc3545; }    /* 🔴 Red: Old / Low Faith (then again stoplight colors does get ppl) */
 
         .no-results {
             text-align: center;
@@ -174,12 +175,12 @@
     <div class="app-container">
         <h1>⛽ Geo Radar Gas Finder</h1>
 
-        <!-- SEARCH & MAP SECTION -->
+        <!-- SEARCH & MAP SECTION (so this seems to be how people do it, I will need to invent a better one later, gives me video game minimap vibes)-->
         <div class="search-box">
             <button id="gps-search-btn" class="gps-btn">📍 Scan 5-Mile Radius & Radar Map</button>
         </div>
 
-        <!-- MOCK 5-MILE RADAR MAP CANVAS -->
+        <!-- MOCK 5-MILE RADAR MAP CANVAS (we can use 5 mi, but like it will need to be bigger irl, right? check how much ppl really commute ) -->
         <div class="map-container">
             <canvas id="radarCanvas" width="260" height="260"></canvas>
             <div class="map-label">5-Mile Radius Radar View</div>
@@ -188,15 +189,13 @@
         <div id="results-list" class="results-container"></div>
 
         <hr>
-
-        <!-- STREAMLINED CROWDSOURCE FORM (PIN ONLY) -->
-        <!-- STREAMLINED CROWDSOURCE FORM (PIN ONLY) -->
+        <!-- STREAMLINED CROWDSOURCE FORM (PIN ONLY)(apparently this is the standard but idk seems like I can do better later) -->
         <h2>Submit Price & Pin</h2>
         <div class="add-box">
-            <!-- 1. Added list="known-stations" and autocomplete="off" -->
+            <!-- 1. Added list="known-stations" and autocomplete="off" (writing notes, so I can remember how much ive grown) -->
             <input id="new-name" type="text" placeholder="Station Name (e.g. Speedway)" list="known-stations" autocomplete="off">
             
-            <!-- 2. The Godot-style Enum Dropdown List -->
+            <!-- 2. The Godot-style Enum Dropdown List (starting gdscript as my learning language is kinda nice tho, but this feels like real coding) -->
             <datalist id="known-stations">
                 <option value="Speedway">
                 <option value="Marathon">
@@ -218,12 +217,12 @@
     </div>
 
 <script>
-    // 1. SUPABASE CLOUD CONNECTION
+    // 1. SUPABASE CLOUD CONNECTION, this is really nice tbh. I gotta learn more about supabase, ez integration with github too!
     const SUPABASE_URL = 'https://gtwoqrymxyzqzmutuplv.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_l6qW68jDY4J6BSwS9nAnrw_37PHghDi';
     const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // DOM References
+    // DOM References (doms are like nodes in godot, kinda, but this is real coding stuff)
     const gpsSearchBtn = document.querySelector('#gps-search-btn');
     const resultsList = document.querySelector('#results-list');
     const canvas = document.querySelector('#radarCanvas');
@@ -237,10 +236,10 @@
     let capturedLatitude = null;
     let capturedLongitude = null;
 
-    // Draw initial blank radar grid on load
+    // Draw initial blank radar grid on load (always do blank stuff first)
     drawRadarMap([]);
 
-    // 2. HAVERSINE DISTANCE FORMULA (miles)
+    // 2. HAVERSINE DISTANCE FORMULA (miles) (its recommended to look this up as needed, there are alot of resources for shortcuts, google is a friend)
     function calculateDistance(lat1, lon1, lat2, lon2) {
         const R = 3958.8;
         const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -253,7 +252,7 @@
         return R * c;
     }
 
-    // 3. DRAW CUSTOM 5-MILE RADAR MAP ON CANVAS
+    // 3. DRAW CUSTOM 5-MILE RADAR MAP ON CANVAS (learn how this works better for next project)
     function drawRadarMap(stations, userLat, userLon) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -261,7 +260,7 @@
         const centerY = canvas.height / 2;
         const maxRadiusPixels = 110; // 5 miles outer ring
 
-        // Draw radar circles (1mi, 3mi, 5mi rings)
+        // Draw radar circles (1mi, 3mi, 5mi rings) (maybe we can make it nicer?)
         [0.2, 0.6, 1.0].forEach(function(scale) {
             ctx.beginPath();
             ctx.arc(centerX, centerY, maxRadiusPixels * scale, 0, 2 * Math.PI);
@@ -270,14 +269,14 @@
             ctx.stroke();
         });
 
-        // Draw crosshairs
+        // Draw crosshairs (actually this is not bad)
         ctx.strokeStyle = '#22223b';
         ctx.beginPath();
         ctx.moveTo(centerX, 15); ctx.lineTo(centerX, canvas.height - 15);
         ctx.moveTo(15, centerY); ctx.lineTo(canvas.width - 15, centerY);
         ctx.stroke();
 
-        // Draw User Center Pin (Blue)
+        // Draw User Center Pin (Blue) (I feel like I need to look up how to do these with stars and stuff)
         ctx.fillStyle = '#007bff';
         ctx.beginPath();
         ctx.arc(centerX, centerY, 6, 0, 2 * Math.PI);
@@ -286,7 +285,7 @@
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // If we have stations and user GPS, plot them relative to center
+        // If we have stations and user GPS, plot them relative to center (so most of this was looked up and changed for my needs, definitely add this to bookmarks)
         if (userLat && userLon && stations) {
             stations.forEach(function(station, index) {
                 if (!station.latitude || !station.longitude) return;
@@ -317,7 +316,7 @@
         }
     }
 
-    // 4. SCAN RADAR & FETCH NEARBY STATIONS VIA GPS
+    // 4. SCAN RADAR & FETCH NEARBY STATIONS VIA GPS (we can actaully do alot with this (keep in mind for future projects))
     async function scanRadarAndSearch() {
         resultsList.innerHTML = "<p class='no-results'>Acquiring GPS location...</p>";
 
@@ -357,7 +356,7 @@
                 return distance <= 5;
             });
 
-            // Sort cheapest first
+            // Sort cheapest first (basic sorting for most things, maybe memorize)
             nearbyStations.sort(function(a, b) {
                 return a.price - b.price;
             });
@@ -372,7 +371,7 @@
         }, { timeout: 10000 });
     }
 
-    // 5. TAG CURRENT GPS LOCATION FOR SUBMISSION WITH ACCURACY CHECK
+    // 5. TAG CURRENT GPS LOCATION FOR SUBMISSION WITH ACCURACY CHECK (remember listeners are like signals in godot)
     gpsTagBtn.addEventListener('click', function() {
         if (!navigator.geolocation) {
             alert("Geolocation not supported.");
@@ -384,7 +383,7 @@
             const accuracy = position.coords.accuracy; // Accuracy in meters
             console.log("GPS Accuracy reading:", accuracy, "meters");
 
-            // Drift Protection: If accuracy worse than 50 meters (~160 feet)
+            // Drift Protection: If accuracy worse than 50 meters (~160 feet) (this is a great way to handle this. definitely lock this in the brain!)
             if (accuracy > 50) {
                 const proceed = confirm(`⚠️ Weak GPS signal detected (~${Math.round(accuracy)}m accuracy). You might be indoors or near tall buildings. Drop pin anyway?`);
                 if (!proceed) {
@@ -409,7 +408,7 @@
         });
     });
 
-    // 6. SUBMIT TO CLOUD DATABASE
+    // 6. SUBMIT TO CLOUD DATABASE (so we can just do this, so easy. trim is also a core thing to keep in mind)
 async function submitGasPrice() {
     const name = newName.value.trim();
     const price = parseFloat(newPrice.value);
@@ -430,7 +429,7 @@ async function submitGasPrice() {
         return;
     }
 
-    // 🛡️ DEFENSE LAYER 1: COOLDOWN TIMER (15-Minute Rate Limit)
+    // 🛡️ DEFENSE LAYER 1: COOLDOWN TIMER (15-Minute Rate Limit) (basically first defense against spamming)
     const cooldownMinutes = 15;
     const lastSubmission = localStorage.getItem('last_gas_submission');
     if (lastSubmission) {
@@ -442,7 +441,7 @@ async function submitGasPrice() {
         }
     }
 
-    // 2. DUPLICATE CHECK: Fetch existing stations from Supabase first
+    // 2. DUPLICATE CHECK: Fetch existing stations from Supabase first (lets us make sure we arent getting a ton in one spot)
     const { data: existingStations, fetchError } = await db
         .from('stations')
         .select('*');
@@ -451,7 +450,7 @@ async function submitGasPrice() {
         console.error('Error checking existing stations:', fetchError);
     }
 
-    // Helper math function to calculate distance in miles (Haversine formula)
+    // Helper math function to calculate distance in miles (Haversine formula) (that dang formula again lol)
     function getDistanceFromLatLonInMiles(lat1, lon1, lat2, lon2) {
         const R = 3958.8; // Radius of the earth in miles
         const dLat = deg2rad(lat2 - lat1);
@@ -467,7 +466,7 @@ async function submitGasPrice() {
         return deg * (Math.PI / 180);
     }
 
-    // Look for any station within 0.03 miles (~50 meters) of current GPS pin
+    // Look for any station within 0.03 miles (~50 meters) of current GPS pin (again super nice formula, we can use this for soooo much)
     let matchingStation = null;
     if (existingStations) {
         matchingStation = existingStations.find(station => {
@@ -479,7 +478,7 @@ async function submitGasPrice() {
         });
     }
 
-    // 🛡️ DEFENSE LAYER 2: PERCENTAGE JUMP GUARDRAIL (Anomaly Detection)
+    // 🛡️ DEFENSE LAYER 2: PERCENTAGE JUMP GUARDRAIL (Anomaly Detection)(again used a reference double check bookmarks in Brave)
     if (matchingStation) {
         const priceDiffPercent = Math.abs(price - matchingStation.price) / matchingStation.price;
         if (priceDiffPercent > 0.30) { // More than 30% swing
@@ -544,8 +543,7 @@ async function submitGasPrice() {
     scanRadarAndSearch();
 }
 
-    // Helper function to calculate time elapsed
-    // Helper function to calculate time elapsed
+    // Helper function to calculate time elapsed (we can use this for a whole lot actually. timestamps galore)
     function getTimeAgo(dateString) {
         if (!dateString) return "Recently";
         const now = new Date();
@@ -559,7 +557,7 @@ async function submitGasPrice() {
         return `${daysAgo} day(s) ago`;
     }
 
-    // 🌟 NEW: Calculate Confidence / Faith Rating based on recency
+    // 🌟 NEW: Calculate Confidence / Faith Rating based on recency (we back at it with stoplight colours lol)
     function getConfidenceLevel(dateString) {
         if (!dateString) return { label: "Moderate Faith", class: "faith-moderate" };
         
@@ -614,7 +612,7 @@ async function submitGasPrice() {
         });
     }
 
-    // Event Listeners
+    // Event Listeners (again like signals for pressed in godot, remember the formatting and practice writing it a ton so my hands remember)
     gpsSearchBtn.addEventListener('click', scanRadarAndSearch);
     addBtn.addEventListener('click', submitGasPrice);
 </script>
